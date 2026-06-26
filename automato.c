@@ -2,6 +2,7 @@
 #include <linux/if_ether.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
+#include "ebpf_defs.h"
 #include <bpf/bpf_endian.h>
 
 // Definições dos Estados e Eventos
