@@ -16,7 +16,9 @@ topology:
     # --- GATEWAY ---
     gateway:
       kind: linux
-      image: ebpf-host:latest  
+      image: ebpf-host:latest 
+      cpu: 0.3    
+      memory: 3G 
       binds:
         - /lib/modules:/lib/modules:ro
         - /usr/src:/usr/src:ro
