@@ -11,9 +11,6 @@
 
 
 ---
-## 📖 Visão Geral
-Protótipo desenvolvido como atividade prática da disciplina de **Teoria da Computação** do Mestrado em Computação Aplicada.  
-O sistema implementa um **Autômato Finito Determinístico (DFA)** para validar cadeias de entrada e demonstrar conceitos fundamentais de linguagens formais.
 
 ## 🚀 O que este protótipo demonstra
 - **[Modelagem de Estados](ca://s?q=Modelagem_de_estados_em_automatos):** representação explícita de estados e transições.  
@@ -24,176 +21,102 @@ O sistema implementa um **Autômato Finito Determinístico (DFA)** para validar 
 ---
 
 
+🚀 Guia de Execução do Protótipo
+Este guia descreve os passos necessários para compilar o plano de dados eBPF/XDP, orquestrar a topologia de rede via Containerlab e validar o monitoramento do autômato de estados em tempo real.
+
+📋 Pré-requisitos
+Antes de iniciar, certifique-se de ter os seguintes componentes instalados na sua máquina Host (Linux ou WSL2):
 
 
+- Docker
 
-## 🔧 Pré-requisitos
+- Containerlab
+
+- Clang e LLVM (para compilação do código BPF)
+
+- Python 3 com a biblioteca BCC (python3-bpfcc)
 
 
-### 0. Requisitos do Sistema
-
-Os seguintes requisitos devem ser atendidos para que a ferramenta containerlab seja executada com sucesso (https://containerlab.dev/install/):
-
-- Um usuário com privilégios de sudo para executar o containerlab.
-
-- Um servidor Linux, pode ser WSL2 (https://learn.microsoft.com/pt-br/windows/wsl/install).
-
-### 1. Instalar o Docker
-
-```bash
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-```
-
-> Saia e entre novamente na sessão após adicionar seu usuário ao grupo `docker`.
-
-### 2. Instalar o Containerlab
+  🛠️ Passo 1: Inicializar a Topologia de Rede
+Navegue até a raiz do projeto e implante os contêineres emulados que compõem o ecossistema IoT:
 
 ```
-bash -c "$(curl -sL https://get.containerlab.dev)"
+sudo containerlab deploy --topo topo.yaml
 ```
 
-Verifique a instalação:
+Este comando criará o switch virtual (clab-bridge), o gateway de borda (clab-gateway) e os dois nós agentes (clab-sensor e clab-atacante).
 
+⚙️ Passo 2: Compilar e Injetar o Programa XDP
+Execute o script de automação para compilar o código em C do autômato e vinculá-lo à interface de rede do gateway:
 ```
-containerlab version
-```
-
----
-
-### 3. Obtendo o Laboratório
-
-Clone o repositório e acesse o diretório do laboratório:
-
-```bash
-git clone https://github.com/marcioclay/TE_eBPF.git
-cd TE_eBPF
-```
-Instalação de imagem ubuntu com ebpf
-```
-# A. Entre na pasta ebpf-host dentro do seu repositório local
-cd ebpf-host/
-
-# B. Construa a imagem localmente
-sudo docker build -t ebpf-host:latest .
-```
----
-
-### 4. Compilar o Programa eBPF
-
-O script `compile.sh` usa um **container nicolaka/netshoot como ambiente de build**, dispensando a instalação de ferramentas de compilação no host.Isso evita que você precise instalar localmente todas as dependências de eBPF (que podem ser pesadas ou conflitar) diretamente no seu sistema host.
-
-```bash
-# Se não estiver no diretório do lab:
-
-chmod +x ./scripts/compile.sh
-./scripts/compile.sh
+sudo chmod +x setup_bpf.sh
+sudo ./setup_bpf.sh
 ```
 
-<details>
-<summary>O que o compile.sh faz?</summary>
-
-Ele sobe um container Docker temporário que:
-1. Instala `clang`, `llvm`, `libbpf-dev` e `gcc-multilib`.
-2. Compila `xdp_monitor.c` gerando bytecode para a **máquina virtual BPF** (`-target bpf`).
-3. Gera o arquivo objeto `xdp_monitor.o` no diretório atual.
-4. Remove o container de build automaticamente (`--rm`).
-
-</details>
-
-**Saída esperada:**
-```
-Success! xdp_monitor.o created. 😱😱😱
-```
-
----
-
-### 5. Deploy da Topologia
-
-```bash
-sudo containerlab deploy -t topologia.yml --reconfigure
-```
-
-Isso irá:
-- Criar três containers Linux (`gateway` , `atacante` e `sensor`).
-- Configurar os IPs nas interfaces `eth1` de cada nó.
-- Montar o `xdp_monitor.o` dentro do `gateway` em `/xdp_monitor.o`.
-- Criar um barramento virtual através de uma bridge conectando as interfaces eth1 dos nós atacante, sensor e gateway.
-
-Verifique se o lab está rodando:
-
-```bash
-docker ps --filter "label=containerlab=TE-eBPF"
-```
-```
-docker ps --format "table {{.Names}}\t{{.Status}}" | grep clab
-```
-
----
-
-
-### 6. Verificar Conectividade Inicial
-
-Antes de ativar o filtro XDP, confirme que os nós se comunicam normalmente:
-
-```bash
-docker exec clab-lab-ebpf-sensor ping -c 3 10.0.0.1
-```
-
-**Resultado esperado:** `0% packet loss`  
-
----
-
-### 7. Executar script 
-
-Instala as bibliotecas necessárias para o painel de visualização e configure o broker MQTT no Gateway:
-
-  ```
-  chmod +x ./scripts/setup.sh
-  ./scripts/setup.sh
-  ```
-
-### 8. Ativar o Filtro XDP
-
-8.1 Carregar e pinar o programa XDP
+📊 Passo 3: Inicializar o Dashboard de Monitoramento (Terminal 1)
+Terminal host, execute o painel em Python para carregar a matriz de transições nos mapas eBPF e iniciar a coleta de traços do Kernel:
 
 ```
-chmod +x scripts/load_xdp.sh
-./scripts/load_xdp.sh xdp
+sudo python3 leitor.py
 ```
---- 
+A tela será limpa e o dashboard exibirá o estado inicial estático:
 
+[ Q0 (Desconectado) ] ───( Aguardando Tráfego )───> [ Q0 ] 
 
+## 🧪 Passo 4: Executar os Cenários de Teste (Terminal 2)
 
-### 📂 Estrutura do Projeto 
+Abra uma nova aba ou janela de terminal para interagir com os nós da rede.
 
-```
-TE_eBPF/
-├── topologia.yml       # Configuração do laboratório (Containerlab)
-├── xdp_monitor.c       # Código eBPF otimizado (DDoS + IP Spoofing)
-├── scripts/
-│   ├── compile.sh      # Compila o xdp_monitor.c usando container
-│   ├── setup.sh        # Configura dependências e rede
-│   └── load_xdp.sh     # Ativa/Limpa o XDP no Gateway
-├── dash/
-│   └── dashboard.py    # Dashboard Analítico (PPS, Jitter, Drops)
-└── metricas/
-    └── xdp_dos.md      # Roteiro de testes detalhados
+### 🔹 Cenário A: Fluxo Nominal Legítimo (Handshake + Telemetria)
+
+Dispare o script do sensor de dentro do contêiner isolado:
 
 ```
+docker exec -it clab-lab-ebpf-sensor python3 /src/sensor.py
+```
+O que observar:
 
----
+O sensor enviará o pacote CONNECT e fará uma pausa programada de 10 segundos.
 
-### 📚 Referências 
+No Terminal 1, o dashboard capturará o evento instantaneamente e travará na transição de handshake legítimo:
+```
+[ Q0 (Desconectado) ] ───( CONNECT Autorizado )───> [ ✅ Q1 (Autenticado) ]
+```
+Após a pausa, o sensor começará a enviar telemetrias PUBLISH contínuas, mantendo o estado estabilizado em Q1 → Q1. 
 
-- [Documentação Oficial do eBPF](https://ebpf.io/what-is-ebpf/)
-- [Documentação do Containerlab](https://containerlab.dev/quickstart/)
-- [Tutorial XDP (kernel.org)](https://github.com/xdp-project/xdp-tutorial)
-- [libbpf GitHub](https://github.com/libbpf/libbpf)
-- [nicolaka/netshoot — Container de diagnóstico de rede](https://github.com/nicolaka/netshoot)
-- [Tutorial de artigo ataque slow](https://github.com/gianluca2414/MQTT_SlowITe )
-- [1] A. Tolay, *eBPF-Based Real-Time DDoS Mitigation for IoT Edge Devices*, Jul. 13, 2025. doi: 10.48550/arXiv.2508.00851
-- [2] C. K. Dominicini, *Redes Programáveis com XDP/eBPF*, AVA da disciplina Redes Programáveis – TE em Redes I, Vila Velha, 2026.
+🔹 Cenário B: Mitigação de Ataque por Injeção de Estado
+Abra o terminal do nó atacante e tente forçar o envio de dados sem realizar uma conexão prévia:
+```
+docker exec -it clab-lab-ebpf-atacante python3 /src/atacante_injeçao.py
+```
+
+O que observar:
+
+- O autômato in-kernel detectará a quebra da gramática lógica a partir do estado Q0.
+
+- O pacote será descartado via XDP_DROP na placa de rede.
+
+- O dashboard exibirá o bloqueio imediato:
+```
+  [ Q0 (Desconectado) ] ───( PUBLISH Sem Handshake )───> [ 🚨 QERR (DROP) ]
+```
+
+🔹 Cenário C: Mitigação de Abuso por Duplo Handshake
+Com o sensor legítimo do Cenário A ainda ativo e autenticado (Q1), force o envio de um novo pacote de conexão redundante:
+```
+docker exec -it clab-lab-ebpf-atacante python3 /src/ataque_reconexao.py
+```
+
+O que observar:
+
+- O Kernel interceptará o desvio comportamental de sessão duplicada.
+
+- O IP do dispositivo será movido diretamente para o sorvedouro reativo permanentemente.
+
+- Todo o tráfego subsequente será dropado:
+```
+  [ Q1 (Autenticado) ] ───( Duplo CONNECT Detectado )───> [ 🚨 QERR (DROP) ]
+```
 
 
 
