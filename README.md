@@ -21,10 +21,10 @@
 ---
 
 
-🚀 Guia de Execução do Protótipo
+Guia de Execução do Protótipo
 Este guia descreve os passos necessários para compilar o plano de dados eBPF/XDP, orquestrar a topologia de rede via Containerlab e validar o monitoramento do autômato de estados em tempo real.
 
-📋 Pré-requisitos
+ Pré-requisitos
 Antes de iniciar, certifique-se de ter os seguintes componentes instalados na sua máquina Host (Linux ou WSL2):
 
 
@@ -37,8 +37,8 @@ Antes de iniciar, certifique-se de ter os seguintes componentes instalados na su
 - Python 3 com a biblioteca BCC (python3-bpfcc)
 
 
-  🛠️ Passo 1: Inicializar a Topologia de Rede
-Navegue até a raiz do projeto e implante os contêineres emulados que compõem o ecossistema IoT:
+   Passo 1: Inicializar a Topologia de Rede
+Navegue até a raiz e inicie a topologia:
 
 ```
 sudo containerlab deploy --topo topo.yaml
@@ -46,14 +46,14 @@ sudo containerlab deploy --topo topo.yaml
 
 Este comando criará o switch virtual (clab-bridge), o gateway de borda (clab-gateway) e os dois nós agentes (clab-sensor e clab-atacante).
 
-⚙️ Passo 2: Compilar e Injetar o Programa XDP
+ Passo 2: Compilar e Injetar o Programa XDP
 Execute o script de automação para compilar o código em C do autômato e vinculá-lo à interface de rede do gateway:
 ```
 sudo chmod +x setup_bpf.sh
 sudo ./setup_bpf.sh
 ```
 
-📊 Passo 3: Inicializar o Dashboard de Monitoramento (Terminal 1)
+ Passo 3: Inicializar o Dashboard de Monitoramento (Terminal 1)
 Terminal host, execute o painel em Python para carregar a matriz de transições nos mapas eBPF e iniciar a coleta de traços do Kernel:
 
 ```
@@ -63,11 +63,11 @@ A tela será limpa e o dashboard exibirá o estado inicial estático:
 
 [ Q0 (Desconectado) ] ───( Aguardando Tráfego )───> [ Q0 ] 
 
-## 🧪 Passo 4: Executar os Cenários de Teste (Terminal 2)
+##  Passo 4: Executar os Cenários de Teste (Terminal 2)
 
 Abra uma nova aba ou janela de terminal para interagir com os nós da rede.
 
-### 🔹 Cenário A: Fluxo Nominal Legítimo (Handshake + Telemetria)
+###  Cenário A: Fluxo Legítimo (Handshake + Telemetria)
 
 Dispare o script do sensor de dentro do contêiner isolado:
 
@@ -79,39 +79,42 @@ O que observar:
 O sensor enviará o pacote CONNECT e fará uma pausa programada de 10 segundos.
 
 No Terminal 1, o dashboard capturará o evento instantaneamente e travará na transição de handshake legítimo:
+
 ```
 [ Q0 (Desconectado) ] ───( CONNECT Autorizado )───> [ ✅ Q1 (Autenticado) ]
 ```
 Após a pausa, o sensor começará a enviar telemetrias PUBLISH contínuas, mantendo o estado estabilizado em Q1 → Q1. 
 
-🔹 Cenário B: Mitigação de Ataque por Injeção de Estado
+Cenário B: Mitigação de Ataque por Injeção de Estado
+
 Abra o terminal do nó atacante e tente forçar o envio de dados sem realizar uma conexão prévia:
 ```
-docker exec -it clab-lab-ebpf-atacante python3 /src/atacante_injeçao.py
+docker exec -it clab-lab-ebpf-atacante python3 /src/atacante.py
 ```
 
 O que observar:
 
-- O autômato in-kernel detectará a quebra da gramática lógica a partir do estado Q0.
+- O autômato detectará a quebra da gramática a partir do estado Q0.
 
 - O pacote será descartado via XDP_DROP na placa de rede.
 
 - O dashboard exibirá o bloqueio imediato:
+  
 ```
   [ Q0 (Desconectado) ] ───( PUBLISH Sem Handshake )───> [ 🚨 QERR (DROP) ]
 ```
 
-🔹 Cenário C: Mitigação de Abuso por Duplo Handshake
-Com o sensor legítimo do Cenário A ainda ativo e autenticado (Q1), force o envio de um novo pacote de conexão redundante:
+Cenário C: Mitigação de Abuso por Duplo Handshake
+
+Mantenha o sensor legítimo do cenário A ativo e autenticado (Q!), force o envio de um novo pacote redunte em outro terminal.
+
 ```
-docker exec -it clab-lab-ebpf-atacante python3 /src/ataque_reconexao.py
+docker exec -it clab-lab-ebpf-sensor python3 /src/sensor.py
 ```
 
 O que observar:
 
 - O Kernel interceptará o desvio comportamental de sessão duplicada.
-
-- O IP do dispositivo será movido diretamente para o sorvedouro reativo permanentemente.
 
 - Todo o tráfego subsequente será dropado:
 ```
